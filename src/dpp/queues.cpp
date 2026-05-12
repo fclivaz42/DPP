@@ -225,7 +225,7 @@ http_request_completion_t http_request::run(request_concurrency_queue* processor
 	}
 	http_connect_info hci = https_client::get_host_info(_host);
 	try {
-		cli = std::make_unique<https_client>(
+		std::unique_ptr<https_client> tmp = std::make_unique<https_client>(
 			owner,
 			hci.hostname,
 			hci.port,
@@ -286,6 +286,10 @@ http_request_completion_t http_request::run(request_concurrency_queue* processor
 				});
 			}
 		);
+		{
+			std::lock_guard<std::mutex>	client(this->cli_mutex);
+			cli = std::move(tmp);
+		}
 	}
 	catch (const std::exception& e) {
 		owner->log(ll_error, "HTTP(S) error on " + hci.scheme + " connection to " + hci.hostname + ":" + std::to_string(hci.port) + ": " + std::string(e.what()));

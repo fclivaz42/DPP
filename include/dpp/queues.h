@@ -229,12 +229,17 @@ class DPP_EXPORT http_request {
 	/**
 	 * @brief True if request has been made.
 	 */
-	bool completed;
+	std::atomic<bool> completed;
 
 	/**
 	 * @brief True for requests that are not going to discord (rate limits code skipped).
 	 */
 	bool non_discord;
+
+	/**
+	 * @brief Client mutex
+	 */
+	std::mutex cli_mutex;
 
 	/**
 	 * @brief HTTPS client
