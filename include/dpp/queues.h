@@ -466,6 +466,11 @@ public:
 	std::shared_mutex in_mutex;
 
 	/**
+	 * @brief Removals queue mutex thread safety.
+	 */
+	std::mutex	rem_mutex;
+
+	/**
 	 * @brief Inbound queue timer. The timer is called every second,
 	 * and when it wakes up it checks for requests pending to be sent in the queue.
 	 * If there are any requests and we are not waiting on rate limit, it will send them,

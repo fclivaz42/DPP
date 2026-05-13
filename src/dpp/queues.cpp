@@ -153,6 +153,8 @@ void populate_result(const std::string &url, cluster* owner, http_request_comple
 /* Returns true if the request has been made */
 bool http_request::is_completed()
 {
+	// For some odd reason, BSD requires this to have a lock to prevent data races even though `completed` is std::atomic.
+	std::unique_lock<std::mutex> lock(this_captured_mutex);
 	return completed;
 }
 
@@ -281,8 +283,8 @@ http_request_completion_t http_request::run(request_concurrency_queue* processor
 					{
 						std::lock_guard<std::mutex> lock(this_captured_mutex);
 						this_captured = false;
+						this_captured_signal.notify_all();
 					}
-					this_captured_signal.notify_all();
 				});
 			}
 		);
@@ -317,7 +319,7 @@ request_concurrency_queue::request_concurrency_queue(class cluster* owner, class
 		tick_and_deliver_requests(in_index);
 		/* Clear pending removals in the removals queue */
 		if (time(nullptr) % 90 == 0) {
-			std::scoped_lock lock1{in_mutex};
+			std::scoped_lock lock1{rem_mutex};
 			for (auto it = removals.cbegin(); it != removals.cend();) {
 				if ((*it)->is_completed()) {
 					it = removals.erase(it);
@@ -409,6 +411,7 @@ void request_concurrency_queue::tick_and_deliver_requests(uint32_t index)
 			{
 				/* Find the owned pointer in requests_in */
 				std::scoped_lock lock1{in_mutex};
+				std::scoped_lock lock2{rem_mutex};
 
 				const std::string &key = request_view->endpoint;
 				auto [begin, end] = std::equal_range(requests_in.begin(), requests_in.end(), key, compare_request{});

@@ -66,19 +66,17 @@ thread_pool::~thread_pool() {
 	{
 		std::unique_lock<std::mutex> lock(queue_mutex);
 		stop = true;
+		cv.notify_all();
 	}
 
-	cv.notify_all();
 	for (auto &thread: threads) {
 		thread.join();
 	}
 }
 
 void thread_pool::enqueue(thread_pool_task task) {
-	{
-		std::unique_lock<std::mutex> lock(queue_mutex);
-		tasks.emplace(std::move(task));
-	}
+	std::unique_lock<std::mutex> lock(queue_mutex);
+	tasks.emplace(std::move(task));
 	cv.notify_one();
 }
 
