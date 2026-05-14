@@ -471,6 +471,11 @@ public:
 	std::mutex	rem_mutex;
 
 	/**
+	 * @brief Rate-limit bucket mutex thread safety.
+	 */
+	std::mutex	buck_mutex;
+
+	/**
 	 * @brief Inbound queue timer. The timer is called every second,
 	 * and when it wakes up it checks for requests pending to be sent in the queue.
 	 * If there are any requests and we are not waiting on rate limit, it will send them,
@@ -599,7 +604,7 @@ public:
 	 * When globally rate limited the concurrency queues associated with this request queue
 	 * will not process any requests in their timers until the global rate limit expires.
 	 */
-	bool globally_ratelimited;
+	std::atomic<bool> globally_ratelimited;
 
 	/**
 	 * @brief When we are globally rate limited until (unix epoch)

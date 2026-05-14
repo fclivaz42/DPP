@@ -56,6 +56,7 @@ struct DPP_EXPORT socket_engine_epoll : public socket_engine_base {
 	static constexpr size_t MAX_EVENTS = 65536;
 	std::array<struct epoll_event, MAX_EVENTS> events{};
 	int sockets{0};
+	std::mutex	sockets_mutex;
 
 	socket_engine_epoll(const socket_engine_epoll&) = delete;
 	socket_engine_epoll(socket_engine_epoll&&) = delete;
@@ -144,7 +145,10 @@ struct DPP_EXPORT socket_engine_epoll : public socket_engine_base {
 
 	bool register_socket(const socket_events& e) final {
 		bool r = socket_engine_base::register_socket(e);
-		sockets++;
+		{
+			std::lock_guard	lg(sockets_mutex);
+			sockets++;
+		}
 		if (r) {
 			struct epoll_event ev{};
 			ev.events = EPOLLET;
@@ -187,7 +191,10 @@ protected:
 
 	bool remove_socket(dpp::socket fd) final {
 		struct epoll_event ev{};
-		sockets--;
+		{
+			std::lock_guard	lg(sockets_mutex);
+			sockets--;
+		}
 		epoll_ctl(epoll_handle, EPOLL_CTL_DEL, fd, &ev);
 		if (!owner->on_socket_close.empty()) {
 			socket_close_t event(owner, 0, "");
