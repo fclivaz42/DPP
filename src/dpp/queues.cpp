@@ -260,7 +260,10 @@ http_request_completion_t http_request::run(request_concurrency_queue* processor
 					/* We are globally rate limited - user up to shenanigans */
 					processor->requests->globally_limited_until = (newbucket.retry_after ? newbucket.retry_after : newbucket.reset_after) + newbucket.timestamp;
 				}
-				processor->buckets[this->endpoint] = newbucket;
+				{
+					std::lock_guard<std::mutex>	lg{processor->buckets_mutex};
+					processor->buckets[this->endpoint] = newbucket;
+				}
 
 				/* Transfer it to completed requests */
 				{
@@ -379,31 +382,38 @@ void request_concurrency_queue::tick_and_deliver_requests(uint32_t index)
 		for (auto& request_view : requests_view) {
 			const std::string &key = request_view->endpoint;
 			http_request_completion_t rv;
-			auto currbucket = buckets.find(key);
 
-			if (currbucket != buckets.end()) {
-				/* There's a bucket for this request. Check its status. If the bucket says to wait,
-				 * skip all requests until the timer value indicates the rate limit won't be hit
-				 */
-				if (currbucket->second.remaining < 1) {
-					uint64_t wait = (currbucket->second.retry_after ? currbucket->second.retry_after : currbucket->second.reset_after);
-					if ((uint64_t)time(nullptr) > currbucket->second.timestamp + wait) {
-						/* Time has passed, we can process this bucket again. send its request. */
-						request_view->run(this, creator);
-					} else {
-						if (!request_view->waiting) {
-							request_view->waiting = true;
+			{
+				std::unique_lock<std::mutex>	unilock{buckets_mutex};
+				auto currbucket = buckets.find(key);
+
+				if (currbucket != buckets.end()) {
+					/* There's a bucket for this request. Check its status. If the bucket says to wait,
+					 * skip all requests until the timer value indicates the rate limit won't be hit
+					 */
+					if (currbucket->second.remaining < 1) {
+						uint64_t wait = (currbucket->second.retry_after ? currbucket->second.retry_after : currbucket->second.reset_after);
+						if ((uint64_t)time(nullptr) > currbucket->second.timestamp + wait) {
+							/* Time has passed, we can process this bucket again. send its request. */
+							unilock.unlock();
+							request_view->run(this, creator);
+						} else {
+							if (!request_view->waiting) {
+								request_view->waiting = true;
+							}
+							/* Time not up yet, wait more */
+							break;
 						}
-						/* Time not up yet, wait more */
-						break;
+					} else {
+						/* We aren't at the limit, so we can just run the request */
+						unilock.unlock();
+						request_view->run(this, creator);
 					}
 				} else {
-					/* We aren't at the limit, so we can just run the request */
+					/* No bucket for this endpoint yet. Just send it, and make one from its reply */
+					unilock.unlock();
 					request_view->run(this, creator);
 				}
-			} else {
-				/* No bucket for this endpoint yet. Just send it, and make one from its reply */
-				request_view->run(this, creator);
 			}
 
 			/* Remove from inbound requests */
