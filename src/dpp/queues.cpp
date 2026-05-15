@@ -281,8 +281,8 @@ http_request_completion_t http_request::run(request_concurrency_queue* processor
 					{
 						std::lock_guard<std::mutex> lock(this_captured_mutex);
 						this_captured = false;
+						this_captured_signal.notify_all();
 					}
-					this_captured_signal.notify_all();
 				});
 			}
 		);
