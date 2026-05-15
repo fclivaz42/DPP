@@ -331,6 +331,8 @@ request_concurrency_queue::request_concurrency_queue(class cluster* owner, class
 
 request_concurrency_queue::~request_concurrency_queue()
 {
+	std::scoped_lock requests_in_lock{in_mutex};
+	std::scoped_lock removals_queue_lock{rem_mutex};
 	terminate();
 	creator->stop_timer(in_timer);
 }
