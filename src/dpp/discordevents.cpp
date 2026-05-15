@@ -272,6 +272,8 @@ time_t ts_not_null(const json* j, const char* keyname)
 	 * Note that discord timestamps contain a decimal seconds part, which time_t and struct tm
 	 * can't handle. We strip these out.
 	 */
+	static std::mutex	ts_time;
+	std::lock_guard<std::mutex>	lg_time{ts_time};
 	time_t retval = 0;
 	if (j->contains(keyname) && !(*j)[keyname].is_null() && (*j)[keyname].is_string()) {
 		tm timestamp = {};
